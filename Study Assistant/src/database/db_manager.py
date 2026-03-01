@@ -36,12 +36,20 @@ class DatabaseManager:
             self.conn.close()
 
     def create_tables(self):
+        """Create database tables"""
         if not self.cursor:
-            print(
-                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DBManager: Cursor not available, cannot create tables."
-            )
+            print("DBManager: Cursor not available, cannot create tables.")
             return
 
+        # Create settings table
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+
+        # Create notes table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,6 +60,7 @@ class DatabaseManager:
             )
         """)
 
+        # Create tasks table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +74,7 @@ class DatabaseManager:
             )
         """)
 
+        # Create reminders table
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS reminders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,18 +85,17 @@ class DatabaseManager:
                 created_at TEXT NOT NULL
             )
         """)
+
+        # Create note_summaries table
         self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-        """)
-        self.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS study_sessions (
+            CREATE TABLE IF NOT EXISTS note_summaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_date TEXT NOT NULL,
-                duration_seconds INTEGER NOT NULL,
-                mode TEXT
+                note_id INTEGER,
+                note_title TEXT NOT NULL,
+                original_content TEXT NOT NULL,
+                summary_content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (note_id) REFERENCES notes (id)
             )
         """)
         if self.conn:
@@ -274,92 +283,12 @@ class DatabaseManager:
         )
         return self.cursor.fetchall()
 
-    # --- Reminders CRUD operations ---
-    def add_reminder(self, title, description, reminder_time, is_active, created_at):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot add reminder.")
-            return None
-        self.cursor.execute(
-            "INSERT INTO reminders (title, description, reminder_time, is_active, created_at) VALUES (?, ?, ?, ?, ?)",
-            (title, description, reminder_time, is_active, created_at),
-        )
-        if self.conn:
-            self.conn.commit()
-        return self.cursor.lastrowid
-
-    def get_all_reminders(self):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot get reminders.")
-            return []
-        self.cursor.execute(
-            "SELECT id, title, description, reminder_time, is_active, created_at FROM reminders ORDER BY reminder_time ASC"
-        )
-        return self.cursor.fetchall()
-
-    def get_reminder_by_id(self, reminder_id):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot get reminder.")
-            return None
-        self.cursor.execute(
-            "SELECT id, title, description, reminder_time, is_active, created_at FROM reminders WHERE id = ?",
-            (reminder_id,),
-        )
-        return self.cursor.fetchone()
-
-    def update_reminder(
-        self, reminder_id, title, description, reminder_time, is_active
-    ):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot update reminder.")
-            return
-        self.cursor.execute(
-            "UPDATE reminders SET title = ?, description = ?, reminder_time = ?, is_active = ? WHERE id = ?",
-            (title, description, reminder_time, is_active, reminder_id),
-        )
-        if self.conn:
-            self.conn.commit()
-
-    def delete_reminder(self, reminder_id):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot delete reminder.")
-            return
-        self.cursor.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
-        if self.conn:
-            self.conn.commit()
-
-    def get_active_reminders_due_now(self, current_datetime_str):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot get active reminders.")
-            return []
-        print(
-            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DB: Querying for reminders with time: {current_datetime_str}"
-        )
-        self.cursor.execute(
-            "SELECT id, title, description, reminder_time FROM reminders WHERE is_active = 1 AND reminder_time <= ?",
-            (current_datetime_str,),
-        )
-        reminders = self.cursor.fetchall()
-        print(
-            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] DB: Found {len(reminders)} reminders."
-        )
-        return reminders
-
-    def deactivate_reminder(self, reminder_id):
-        if not self.cursor:
-            print("DBManager: Cursor not available, cannot deactivate reminder.")
-            return
-        self.cursor.execute(
-            "UPDATE reminders SET is_active = 0 WHERE id = ?", (reminder_id,)
-        )
-        if self.conn:
-            self.conn.commit()
-
     # --- Study Sessions (Automated Tracking) ---
     def add_study_session(self, duration_seconds, mode="normal"):
         if not self.cursor:
             print("DBManager: Cursor not available, cannot add study session.")
             return
-        session_date = datetime.now().strftime("%Y-%m-%d")
+        session_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.cursor.execute(
             "INSERT INTO study_sessions (session_date, duration_seconds, mode) VALUES (?, ?, ?)",
             (session_date, duration_seconds, mode),
@@ -378,10 +307,115 @@ class DatabaseManager:
         if not self.cursor:
             return []
         self.cursor.execute(
-            "SELECT session_date, SUM(duration_seconds) FROM study_sessions GROUP BY session_date ORDER BY session_date DESC LIMIT ?",
-            (limit,),
+            "SELECT session_date, duration_seconds, mode FROM study_sessions ORDER BY session_date DESC LIMIT ?",
+            (limit,)
         )
         return self.cursor.fetchall()
+
+    def get_recent_notes(self, limit=5):
+        if not self.cursor:
+            return []
+        self.cursor.execute(
+            "SELECT id, title, content, created_at, updated_at FROM notes ORDER BY updated_at DESC LIMIT ?",
+            (limit,)
+        )
+        return self.cursor.fetchall()
+
+    def get_total_notes_count(self):
+        if not self.cursor:
+            return 0
+        self.cursor.execute("SELECT COUNT(*) FROM notes")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_total_tasks_count(self):
+        if not self.cursor:
+            return 0
+        self.cursor.execute("SELECT COUNT(*) FROM tasks")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_completed_tasks_count(self):
+        if not self.cursor:
+            return 0
+        self.cursor.execute("SELECT COUNT(*) FROM tasks WHERE is_completed = 1")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
+
+    def get_completed_tasks_by_date(self, date_str):
+        if not self.cursor:
+            return []
+        self.cursor.execute(
+            "SELECT id, title, description, due_date, is_completed, created_at, completed_at FROM tasks WHERE is_completed = 1 AND DATE(completed_at) = ?",
+            (date_str,)
+        )
+        return self.cursor.fetchall()
+
+    def get_tasks_by_date(self, date_str):
+        """Get all tasks for a specific date"""
+        if not self.cursor:
+            return []
+        self.cursor.execute(
+            "SELECT id, title, description, due_date, is_completed, created_at, completed_at FROM tasks WHERE DATE(due_date) = ?",
+            (date_str,)
+        )
+        return self.cursor.fetchall()
+
+    def get_timer_statistics(self):
+        if not self.cursor:
+            return {}
+        self.cursor.execute("SELECT COUNT(*) FROM study_sessions")
+        count_result = self.cursor.fetchone()
+        total_sessions = count_result[0] if count_result else 0
+        
+        self.cursor.execute("SELECT SUM(duration_seconds) FROM study_sessions")
+        sum_result = self.cursor.fetchone()
+        total_seconds = sum_result[0] if sum_result and sum_result[0] else 0
+        total_minutes = total_seconds // 60 if total_seconds else 0
+        
+        return {
+            'total_sessions': total_sessions,
+            'total_minutes': total_minutes
+        }
+
+    def save_note_summary(self, note_id, note_title, original_content, summary_content, created_at):
+        """Save a note summary to the database"""
+        if not self.cursor:
+            return None
+        self.cursor.execute(
+            "INSERT INTO note_summaries (note_id, note_title, original_content, summary_content, created_at) VALUES (?, ?, ?, ?, ?)",
+            (note_id, note_title, original_content, summary_content, created_at)
+        )
+        if self.conn:
+            self.conn.commit()
+        return self.cursor.lastrowid
+
+    def get_all_note_summaries(self):
+        """Get all note summaries"""
+        if not self.cursor:
+            return []
+        self.cursor.execute(
+            "SELECT id, note_id, note_title, original_content, summary_content, created_at FROM note_summaries ORDER BY created_at DESC"
+        )
+        return self.cursor.fetchall()
+
+    def get_note_summaries_by_note_id(self, note_id):
+        """Get all summaries for a specific note"""
+        if not self.cursor:
+            return []
+        self.cursor.execute(
+            "SELECT id, note_id, note_title, original_content, summary_content, created_at FROM note_summaries WHERE note_id = ? ORDER BY created_at DESC",
+            (note_id,)
+        )
+        return self.cursor.fetchall()
+
+    def get_total_note_summaries_count(self):
+        """Get total count of note summaries"""
+        if not self.cursor:
+            return 0
+        self.cursor.execute("SELECT COUNT(*) FROM note_summaries")
+        result = self.cursor.fetchone()
+        return result[0] if result else 0
 
 
 # Example usage (for testing)

@@ -185,16 +185,103 @@ class NotesTab(QWidget):
             QMessageBox.warning(self, "Lỗi Tóm Tắt", "Không có nội dung để tóm tắt.")
             self.summary_output.clear()
             return
-
-        # Perform summarization
+        
         try:
             summary = self.summarizer.summarize_text(content, sentences_count=5)
             self.summary_output.setText(summary)
+            
+            # Auto-save to database for both summary tab and statistics
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            note_title = self.note_title_input.text().strip() or "Không có tiêu đề"
+            
+            if self.current_note_id is not None:
+                # Save summary with note_id
+                result = self.db_manager.save_note_summary(
+                    self.current_note_id, 
+                    note_title, 
+                    content, 
+                    summary, 
+                    current_time
+                )
+                if result:
+                    QMessageBox.information(
+                        self, 
+                        "Thành Công", 
+                        "Tóm tắt đã được lưu vào thống kê học tập!"
+                    )
+                    # Explicit database commit before refresh
+                    self.db_manager.conn.commit()
+                    # Refresh summary and statistics tabs
+                    self.refresh_other_tabs()
+                else:
+                    QMessageBox.warning(self, "Lỗi", "Không thể lưu tóm tắt!")
+            else:
+                # For new notes, ask to save note first
+                reply = QMessageBox.question(
+                    self,
+                    "Lưu Tóm Tắt",
+                    "Bạn có muốn lưu ghi chú này trước khi lưu tóm tắt không?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.save_note()  # Save note first
+                    # Now save summary with new note_id
+                    if self.current_note_id is not None:
+                        result = self.db_manager.save_note_summary(
+                            self.current_note_id, 
+                            note_title, 
+                            content, 
+                            summary, 
+                            current_time
+                        )
+                        if result:
+                            QMessageBox.information(
+                                self, 
+                                "Thành Công", 
+                                "Ghi chú và tóm tắt đã được lưu vào thống kê học tập!"
+                            )
+                            # Explicit database commit before refresh
+                            self.db_manager.conn.commit()
+                            # Refresh summary and statistics tabs
+                            self.refresh_other_tabs()
+                        else:
+                            QMessageBox.warning(self, "Lỗi", "Không thể lưu tóm tắt!")
+                        
         except Exception as e:
-            QMessageBox.critical(
-                self, "Lỗi Tóm Tắt AI", f"Đã xảy ra lỗi khi tóm tắt: {e}"
-            )
+            QMessageBox.critical(self, "Lỗi Tóm Tắt AI", f"Đã xảy ra lỗi khi tóm tắt: {e}")
             self.summary_output.clear()
+
+    def refresh_other_tabs(self):
+        """Refresh summary and statistics tabs to show new data"""
+        try:
+            # Force database commit first
+            self.db_manager.conn.commit()
+            
+            # Get the main application instance through tab widget
+            parent = self.parent()
+            while parent and not hasattr(parent, 'tab_widget'):
+                parent = parent.parent()
+            
+            if parent and hasattr(parent, 'tab_widget'):
+                # Find the summary and statistics tabs
+                for i in range(parent.tab_widget.count()):
+                    tab = parent.tab_widget.widget(i)
+                    if hasattr(tab, 'load_summaries'):
+                        # Force database commit for this tab
+                        try:
+                            tab.db_manager.conn.commit()
+                        except:
+                            pass
+                        tab.load_summaries()
+                    elif hasattr(tab, 'load_statistics'):
+                        # Force database commit for this tab
+                        try:
+                            tab.db_manager.conn.commit()
+                        except:
+                            pass
+                        tab.load_statistics()
+        except Exception as e:
+            print(f"Error refreshing tabs: {e}")
 
     def clear_note_fields(self):
         self.current_note_id = None

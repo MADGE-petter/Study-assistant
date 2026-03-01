@@ -68,7 +68,7 @@ class TimerTab(QWidget):
         main_layout.addWidget(self.time_display, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Hiển thị trạng thái
-        self.status_display = QLabel("Sẵn sàng cho Pomodoro!")
+        self.status_display = QLabel("Sẵn sàng học thôi!")
         self.status_display.setStyleSheet("font-size: 24px; color: gray;")
         main_layout.addWidget(
             self.status_display, alignment=Qt.AlignmentFlag.AlignCenter
@@ -137,7 +137,12 @@ class TimerTab(QWidget):
         if self.current_time > 0:
             self.current_time -= 1
             self.time_display.setText(self.format_time(self.current_time))
+            
+            # Debug every 10 seconds
+            if self.current_time % 10 == 0:
+                print(f"[TIMER] Update - Time: {self.current_time}s, Running: {self.is_running}, On break: {self.on_break}")
         else:
+            print(f"[TIMER] Timer reached 0 - Running: {self.is_running}, On break: {self.on_break}")
             self.timer.stop()
             self.is_running = False
             self.toggle_buttons(False)  # Disable pause/skip, enable start/reset
@@ -145,7 +150,9 @@ class TimerTab(QWidget):
             if not self.on_break:  # Pomodoro time ended
                 self.pomodoro_count += 1
                 # Automatically log the study session
+                print(f"[TIMER] Pomodoro completed. Logging {self.pomodoro_time} seconds for mode: {self.mode}")
                 self.db_manager.add_study_session(self.pomodoro_time, self.mode)
+                print(f"[TIMER] Study session logged successfully")
 
                 if self.mode == "kid":
                     # In kid mode, no breaks, go straight to next pomodoro
@@ -183,6 +190,7 @@ class TimerTab(QWidget):
         if self.current_time <= 0:  # Prevent starting if time is already 0
             self.reset_timer()  # Reset to current mode's pomodoro time
 
+        print(f"[TIMER] Starting timer - Mode: {self.mode}, Time: {self.current_time}s, On break: {self.on_break}")
         self.is_running = True
         self.timer.start(1000)  # Update every second
         self.toggle_buttons(True)
@@ -203,7 +211,9 @@ class TimerTab(QWidget):
             # Log elapsed study time if it was a study session and was running
             elapsed_time = self.pomodoro_time - self.current_time
             if elapsed_time > 0:
+                print(f"[TIMER] Paused. Logging {elapsed_time} seconds for mode: {self.mode}")
                 self.db_manager.add_study_session(elapsed_time, self.mode)
+                print(f"[TIMER] Study session logged successfully on pause.")
                 logging.info(f"Logged {elapsed_time} seconds study time on pause.")
 
         self.is_running = False
@@ -221,7 +231,9 @@ class TimerTab(QWidget):
         if self.is_running and not self.on_break:
             elapsed_time = self.pomodoro_time - self.current_time
             if elapsed_time > 0:
+                print(f"[TIMER] Reset. Logging {elapsed_time} seconds for mode: {self.mode}")
                 self.db_manager.add_study_session(elapsed_time, self.mode)
+                print(f"[TIMER] Study session logged successfully on reset.")
                 logging.info(f"Logged {elapsed_time} seconds study time on reset.")
 
         self.timer.stop()

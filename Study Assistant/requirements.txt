@@ -1,4 +1,19 @@
-PyQt6
+# Study Assistant Requirements
+# Core dependencies
+PyQt6>=6.4.0
 
+# Additional dependencies
+Pillow>=9.0.0
+requests>=2.28.0
+
+# Build dependencies
+pyinstaller>=5.0.0
+
+# Text processing
 sumy
 nltk
+
+# Development dependencies (optional)
+pytest>=7.0.0
+black>=22.0.0
+flake8>=5.0.0

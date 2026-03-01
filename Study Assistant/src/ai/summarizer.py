@@ -1,5 +1,4 @@
 import logging
-
 import nltk
 from sumy.nlp.stemmers import Stemmer
 from sumy.nlp.tokenizers import Tokenizer
@@ -7,30 +6,24 @@ from sumy.parsers.plaintext import PlaintextParser
 from sumy.summarizers.lsa import LsaSummarizer
 from sumy.utils import get_stop_words
 
-# Configure logging for better feedback
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
-# TextSummarizer class handles text summarization using sumy library.
 class TextSummarizer:
-    def __init__(self, language="english"):  # Default to english, as set in NotesTab
+    def __init__(self, language="english"): 
         self.language = language
         self.tokenizer = None
         self.stemmer = None
         self.summarizer = None
         self.is_ready = (
-            False  # Flag to indicate if summarizer is successfully initialized
+            False  
         )
 
         try:
-            # Attempt to find NLTK data; this will raise LookupError if missing
+            
             nltk.data.find(f"tokenizers/punkt")
             nltk.data.find(f"corpora/stopwords")
-            # For Vietnamese, sumy's Tokenizer might implicitly look for punkt_tab
-            # We rely on the Tokenizer initialization to handle its specific language resources
-
             self.tokenizer = Tokenizer("english")
             self.summarizer = LsaSummarizer()
             self.summarizer.stop_words = get_stop_words("english")
